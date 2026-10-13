@@ -1,0 +1,109 @@
+<?xml version="1.0" ?>
+
+<sdf version="1.7">
+
+  <world name="tracker_world">
+
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+    <model name="ground_plane">
+      <static>true</static>
+
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+        </collision>
+
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+        </visual>
+
+      </link>
+    </model>
+
+    <model name="solartracker">
+
+      <static>false</static>
+
+      <link name="base_pole">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 0.1 1.0</size>
+            </box>
+          </geometry>
+        </visual>
+
+      </link>
+
+      <link name="panel_link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>1.0 0.5 0.05</size>
+            </box>
+          </geometry>
+        </visual>
+
+      </link>
+
+      <joint name="tracking_joint" type="revolute">
+
+        <parent>base_pole</parent>
+        <child>panel_link</child>
+
+        <axis>
+          <xyz>0 1 0</xyz>
+
+          <limit>
+            <lower>-1.57</lower>
+            <upper>1.57</upper>
+          </limit>
+
+          <dynamics>
+            <damping>0.5</damping>
+          </dynamics>
+
+        </axis>
+
+      </joint>
+
+      <plugin
+        filename="ignition-gazebo-joint-position-controller-system"
+        name="ignition::gazebo::systems::JointPositionController">
+
+        <joint_name>tracking_joint</joint_name>
+
+        <p_gain>12.0</p_gain>
+        <i_gain>0.0</i_gain>
+        <d_gain>15.0</d_gain>
+
+      </plugin>
+
+      <plugin
+        filename="ignition-gazebo-joint-state-publisher-system"
+        name="ignition::gazebo::systems::JointStatePublisher">
+
+        <joint_name>tracking_joint</joint_name>
+
+      </plugin>
+
+    </model>
+
+  </world>
+
+</sdf>

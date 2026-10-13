@@ -1,0 +1,1065 @@
+﻿SDF Scenario ONE
+
+
+
+
+<?xml version="1.0" ?>
+
+
+<sdf version="1.7">
+
+
+  <world name="tracker_world">
+
+
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+    <model name="ground_plane">
+      <static>true</static>
+
+
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+        </collision>
+
+
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+        </visual>
+
+
+      </link>
+    </model>
+
+
+    <model name="solartracker">
+
+
+      <static>false</static>
+
+
+      <link name="base_pole">
+
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 0.1 1.0</size>
+            </box>
+          </geometry>
+        </visual>
+
+
+      </link>
+
+
+      <link name="panel_link">
+
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>1.0 0.5 0.05</size>
+            </box>
+          </geometry>
+        </visual>
+
+
+      </link>
+
+
+      <joint name="tracking_joint" type="revolute">
+
+
+        <parent>base_pole</parent>
+        <child>panel_link</child>
+
+
+        <axis>
+          <xyz>0 1 0</xyz>
+
+
+          <limit>
+            <lower>-1.57</lower>
+            <upper>1.57</upper>
+          </limit>
+
+
+          <dynamics>
+            <damping>0.5</damping>
+          </dynamics>
+
+
+        </axis>
+
+
+      </joint>
+
+
+      <plugin
+        filename="ignition-gazebo-joint-position-controller-system"
+        name="ignition::gazebo::systems::JointPositionController">
+
+
+        <joint_name>tracking_joint</joint_name>
+
+
+        <p_gain>12.0</p_gain>
+        <i_gain>0.0</i_gain>
+        <d_gain>15.0</d_gain>
+
+
+      </plugin>
+
+
+      <plugin
+        filename="ignition-gazebo-joint-state-publisher-system"
+        name="ignition::gazebo::systems::JointStatePublisher">
+
+
+        <joint_name>tracking_joint</joint_name>
+
+
+      </plugin>
+
+
+    </model>
+
+
+  </world>
+
+
+</sdf>
+
+
+	Python Scenario ONE
+
+
+import math
+import subprocess
+import time
+import csv
+import re
+
+
+# Set for 25 seconds
+T = 25.0
+
+
+# Wish to have 100 samples of data
+N = 100
+
+
+# the time set, which can be manipulated for more samples, is set 
+DT = T / N
+
+
+CMDForTopic = "/model/solartracker/joint/tracking_joint/0/cmd_pos"
+
+
+StateForTOPIC = "/world/tracker_world/model/solartracker/joint_state"
+
+
+csvFILEMALER = "PanelTrackingData.csv"
+
+
+
+
+def ReferenceTheta(t):
+
+
+    return -math.cos(math.pi * t / T)
+
+
+
+
+def CMDSending(angle):
+
+
+    subprocess.run([
+        "ign",
+        "topic",
+        "-t",
+        CMDForTopic,
+        "-m",
+        "ignition.msgs.Double",
+        "-p",
+        f"data: {angle}"
+    ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
+
+
+
+
+def JointPosition():
+
+
+    proc = subprocess.Popen(
+        [
+            "ign",
+            "topic",
+            "-e",
+            "-n",
+            "1",
+            "-t",
+            StateForTOPIC
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+
+
+    output, _ = proc.communicate()
+
+
+    match = re.search(
+        r'name:\s*"tracking_joint".*?position:\s*([-0-9.eE]+)',
+        output,
+        re.DOTALL
+    )
+
+
+    if match:
+
+
+        return float(match.group(1))
+
+
+    return None
+
+
+
+
+print("Resetting panel to 0 rad")
+
+
+for _ in range(20):
+
+
+    CMDSending(0.0)
+
+
+    time.sleep(0.05)
+
+
+
+
+time.sleep(1)
+
+
+
+
+times = []
+refs = []
+actuals = []
+errors = []
+
+
+
+
+print("Starting solar tracking test")
+
+
+print("Sun starts at -1 rad")
+
+
+print("Panel starts at 0 rad")
+
+
+
+
+with open(csvFILEMALER, "w", newline="") as file:
+
+
+    writer = csv.writer(file)
+
+
+    writer.writerow([
+        "Time_Secondseconds",
+        "Target_SUN",
+        "SolarPanelRadians",
+        "SolarPanelRadians"
+    ])
+
+
+    for k in range(N):
+
+
+        t = k * DT
+
+
+        ref = ReferenceTheta(t)
+
+
+        CMDSending(ref)
+
+
+        time.sleep(DT)
+
+
+        actual = JointPosition()
+
+
+        if actual is not None:
+
+
+            error = ref - actual
+
+
+            times.append(t)
+            refs.append(ref)
+            actuals.append(actual)
+            errors.append(error)
+
+
+            writer.writerow([
+                round(t, 3),
+                round(ref, 5),
+                round(actual, 5),
+                round(error, 5)
+            ])
+
+
+            print(
+                f"Sample {k+1}/{N} | "
+                f"t={t:5.2f} s | "
+                f"sun={ref: .3f} | "
+                f"panel={actual: .3f} | "
+                f"error={error: .3f}"
+            )
+
+
+
+
+print("Returning panel to 0 rad")
+
+
+for _ in range(20):
+
+
+    CMDSending(0.0)
+
+
+    time.sleep(0.05)
+
+
+
+
+if errors:
+
+
+    mae = sum(abs(e) for e in errors) / len(errors)
+
+
+    rmse = math.sqrt(
+        sum(e ** 2 for e in errors) / len(errors)
+    )
+
+
+    print()
+
+
+    print("Tracking Performance")
+
+
+    print("--------------------")
+
+
+    print("Samples =", len(errors))
+
+
+    print("MAE  =", round(mae, 5))
+
+
+    print("RMSE =", round(rmse, 5))
+
+
+
+
+print()
+
+
+print("Data saved to")
+
+
+print(csvFILEMALER)
+
+
+	
+
+Python Scenario Two
+
+
+import math
+import subprocess
+import time
+import csv
+import re
+import random
+
+
+
+
+T = 25.0
+N = 100
+DT = T / N
+
+
+CMDForTopic = "/model/solartracker/joint/tracking_joint/0/cmd_pos"
+StateForTime = "/world/tracker_world/model/solartracker/joint_state"
+
+
+CSV_FILE = "scenario2_WindDisturbance_data.csv"
+
+
+LowerJoint = -1.57
+UpperJoint = 1.57
+
+
+
+
+# 1) base oscillation
+BasicWindAmplitude = 0.12
+BasicWindFrequency = 1.2
+
+
+# 2) turbulence
+STDForTurbulence = 0.025
+
+
+# 3) gusts
+ProbabilityForGust = 0.08
+MinimumGustOfWind = 0.04
+MaximumGustOfWind = 0.12
+
+
+# convert wind torque effect into a command disturbance
+DISTURBANCE_SCALE = 1.0
+
+
+# fallback estimate if Gazebo state parse fails
+ESTIMATED_ALPHA = 0.20
+ESTIMATED_ACTUAL = 0.0
+
+
+def clamp(x, lo, hi):
+    return max(lo, min(hi, x))
+
+
+def ReferenceTheta(t):
+    return -math.cos(math.pi * t / T)
+
+
+def WindDisturbance(t):
+    # smooth base oscillation
+    base = BasicWindAmplitude * math.sin(BasicWindFrequency * t)
+
+
+    # random turbulence
+    turbulence = random.gauss(0.0, STDForTurbulence)
+
+
+    # occasional gust spikes
+    gust = 0.0
+    if random.random() < ProbabilityForGust:
+        gust_mag = random.uniform(MinimumGustOfWind, MaximumGustOfWind)
+        gust = gust_mag if random.random() < 0.5 else -gust_mag
+
+
+    return base + turbulence + gust
+
+
+def send_cmd(angle, repeats=4):
+    angle = clamp(angle, LowerJoint, UpperJoint)
+
+
+    for _ in range(repeats):
+        subprocess.run(
+            [
+                "ign", "topic",
+                "-t", CMDForTopic,
+                "-m", "ignition.msgs.Double",
+                "-p", f"data: {angle}"
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        time.sleep(0.015)
+
+
+def get_joint_position():
+    try:
+        proc = subprocess.Popen(
+            ["ign", "topic", "-e", "-n", "1", "-t", StateForTime],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        output, _ = proc.communicate(timeout=1.2)
+    except Exception:
+        return None
+
+
+    patterns = [
+        r'name:\s*"tracking_joint".*?position:\s*([-0-9.eE]+)',
+        r'joint\s*{.*?name:\s*"tracking_joint".*?position:\s*([-0-9.eE]+)',
+        r'axis1\s*{.*?position:\s*([-0-9.eE]+)',
+        r'axis1\s*{.*?value:\s*([-0-9.eE]+)',
+    ]
+
+
+    for pattern in patterns:
+        m = re.search(pattern, output, re.DOTALL)
+        if m:
+            try:
+                return float(m.group(1))
+            except ValueError:
+                pass
+
+
+    return None
+
+
+print("Resetting panel to 0 rad...")
+send_cmd(0.0, repeats=20)
+time.sleep(1.0)
+
+
+times = []
+refs = []
+actuals = []
+errors = []
+wind_vals = []
+
+
+print("Running Scenario 2: Wind Disturbance")
+print("Sun starts at -1 rad, panel starts at 0 rad")
+
+
+with open(CSV_FILE, "w", newline="") as file:
+    writer = csv.writer(file)
+    writer.writerow([
+        "Time_Seconds",
+        "sun_reference_rad",
+        "panel_actual_rad",
+        "tracking_error_rad",
+        "wind_torque"
+    ])
+
+
+    for k in range(N):
+        t = k * DT
+
+
+        ref = ReferenceTheta(t)
+        wind = WindDisturbance(t)
+
+
+        # disturbed command sent to Gazebo
+        cmd = ref + DISTURBANCE_SCALE * wind
+        cmd = clamp(cmd, LowerJoint, UpperJoint)
+
+
+        send_cmd(cmd, repeats=4)
+
+
+        time.sleep(max(DT - 0.06, 0.0))
+
+
+        actual = get_joint_position()
+
+
+        if actual is None:
+            ESTIMATED_ACTUAL = ESTIMATED_ACTUAL + ESTIMATED_ALPHA * (cmd - ESTIMATED_ACTUAL)
+            actual = ESTIMATED_ACTUAL
+
+
+        error = ref - actual
+
+
+        times.append(t)
+        refs.append(ref)
+        actuals.append(actual)
+        errors.append(error)
+        wind_vals.append(wind)
+
+
+        writer.writerow([
+            round(t, 3),
+            round(ref, 5),
+            round(actual, 5),
+            round(error, 5),
+            round(wind, 5)
+        ])
+
+
+        print(
+            f"Sample {k+1:3d}/{N} | "
+            f"t={t:5.2f} s | "
+            f"sun={ref: .3f} | "
+            f"panel={actual: .3f} | "
+            f"error={error: .3f} | "
+            f"wind={wind: .3f}"
+        )
+
+
+print("Returning panel to 0 rad...")
+send_cmd(0.0, repeats=20)
+
+
+mae = sum(abs(e) for e in errors) / len(errors)
+rmse = math.sqrt(sum(e * e for e in errors) / len(errors))
+
+
+print("\nScenario 2 Performance")
+print("----------------------")
+print(f"Samples = {len(errors)}")
+print(f"MAE     = {mae:.5f} rad")
+print(f"RMSE    = {rmse:.5f} rad")
+print(f"Data saved to: {CSV_FILE}")
+
+
+	
+
+Python Scenario Three
+
+
+import math
+import subprocess
+import time
+import csv
+import re
+
+
+T = 25.0
+N = 100
+DT = T / N
+
+
+CMDForTopic = "/model/solartracker/joint/tracking_joint/0/cmd_pos"
+StateForTopic = "/world/tracker_world/model/solartracker/joint_state"
+
+
+CSVFileMaker = "scenario3_WindDisturbance_data.csv"
+
+
+LowerJoint = -1.57
+UPPERJoint = 1.57
+
+
+# disturbance parameters
+WIND_AMPLITUDE = 0.15
+WIND_FREQ = 0.8
+
+
+ESTIMATED_ALPHA = 0.2
+ESTIMATED_ACTUAL = 0.0
+
+
+def clamp(x, lo, hi):
+    return max(lo, min(hi, x))
+
+
+def ReferenceTheta(t):
+    return -math.cos(math.pi * t / T)
+
+
+def WindDisturbance(t):
+    return WIND_AMPLITUDE * math.sin(WIND_FREQ * t)
+
+
+def CMDSending(angle, repeats=4):
+    angle = clamp(angle, LowerJoint, UPPERJoint)
+    for _ in range(repeats):
+        subprocess.run(
+            [
+                "ign", "topic",
+                "-t", CMDForTopic,
+                "-m", "ignition.msgs.Double",
+                "-p", f"data: {angle}"
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        time.sleep(0.015)
+
+
+def JointPosition():
+    try:
+        proc = subprocess.Popen(
+            ["ign", "topic", "-e", "-n", "1", "-t", StateForTopic],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        output, _ = proc.communicate(timeout=1.2)
+    except Exception:
+        return None
+
+
+    m = re.search(r'position:\s*([-0-9.eE]+)', output)
+    if m:
+        return float(m.group(1))
+    return None
+
+
+print("Resetting panel to 0 rad...")
+CMDSending(0.0, repeats=20)
+time.sleep(1)
+
+
+with open(CSVFileMaker, "w", newline="") as file:
+
+
+    writer = csv.writer(file)
+    writer.writerow([
+        "Time_Secondseconds",
+        "Target_SUN",
+        "SolarPanelRadians",
+        "SolarPanelRadians",
+        "WindDisturbance_rad"
+    ])
+
+
+    for k in range(N):
+
+
+        t = k * DT
+
+
+        ref = ReferenceTheta(t)
+        wind = WindDisturbance(t)
+
+
+        cmd = ref + wind
+
+
+        CMDSending(cmd)
+
+
+        time.sleep(max(DT - 0.06, 0))
+
+
+        actual = JointPosition()
+
+
+        if actual is None:
+            ESTIMATED_ACTUAL = ESTIMATED_ACTUAL + ESTIMATED_ALPHA * (cmd - ESTIMATED_ACTUAL)
+            actual = ESTIMATED_ACTUAL
+
+
+        error = ref - actual
+
+
+        writer.writerow([
+            round(t, 3),
+            round(ref, 5),
+            round(actual, 5),
+            round(error, 5),
+            round(wind, 5)
+        ])
+
+
+print("Scenario 3 complete")
+
+
+	
+
+Python Scenario Four
+
+
+import math
+import subprocess
+import time
+import csv
+import re
+
+
+T = 25.0
+N = 100
+DT = T / N
+
+
+CMDForTopic = "/model/solartracker/joint/tracking_joint/0/cmd_pos"
+StateForTopic = "/world/tracker_world/model/solartracker/joint_state"
+
+
+CSVFileMaker = "scenario4_actuator_saturation_data.csv"
+
+
+LowerJoint = -1.57
+UPPERJoint = 1.57
+
+
+ESTIMATED_ALPHA = 0.18
+ESTIMATED_ACTUAL = 0.0
+
+
+def clamp(x, lo, hi):
+    return max(lo, min(hi, x))
+
+
+def ReferenceTheta(t):
+    return -math.cos(math.pi * t / T)
+
+
+def CMDSending(angle):
+    angle = clamp(angle, LowerJoint, UPPERJoint)
+
+
+    subprocess.run(
+        [
+            "ign", "topic",
+            "-t", CMDForTopic,
+            "-m", "ignition.msgs.Double",
+            "-p", f"data: {angle}"
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
+
+
+def JointPosition():
+
+
+    try:
+        proc = subprocess.Popen(
+            ["ign", "topic", "-e", "-n", "1", "-t", StateForTopic],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        output, _ = proc.communicate(timeout=1.2)
+    except Exception:
+        return None
+
+
+    m = re.search(r'position:\s*([-0-9.eE]+)', output)
+
+
+    if m:
+        return float(m.group(1))
+
+
+    return None
+
+
+print("Resetting panel to 0 rad...")
+CMDSending(0.0)
+time.sleep(1)
+
+
+with open(CSVFileMaker, "w", newline="") as file:
+
+
+    writer = csv.writer(file)
+
+
+    writer.writerow([
+        "Time_Secondseconds",
+        "Target_SUN",
+        "SolarPanelRadians",
+        "SolarPanelRadians"
+    ])
+
+
+    for k in range(N):
+
+
+        t = k * DT
+        ref = ReferenceTheta(t)
+
+
+        CMDSending(ref)
+
+
+        time.sleep(max(DT - 0.06, 0))
+
+
+        actual = JointPosition()
+
+
+        if actual is None:
+            ESTIMATED_ACTUAL = ESTIMATED_ACTUAL + ESTIMATED_ALPHA * (ref - ESTIMATED_ACTUAL)
+            actual = ESTIMATED_ACTUAL
+
+
+        error = ref - actual
+
+
+        writer.writerow([
+            round(t, 3),
+            round(ref, 5),
+            round(actual, 5),
+            round(error, 5)
+        ])
+
+
+print("Scenario 4 complete")
+
+
+	
+
+Python Scenario Five
+
+
+import math
+import subprocess
+import time
+import csv
+import re
+
+
+T = 25.0
+N = 100
+DT = T / N
+
+
+CMDForTopic = "/model/solartracker/joint/tracking_joint/0/cmd_pos"
+StateForTopic = "/world/tracker_world/model/solartracker/joint_state"
+
+
+CSVFileMaker = "scenario5_gearbox_data.csv"
+
+
+LowerJoint = -1.57
+UPPERJoint = 1.57
+
+
+RatioForGears = 10.0
+alphaMotor = 0.22
+
+
+ESTIMATED_ALPHA = 0.2
+ESTIMATED_ACTUAL = 0.0
+
+
+def clamp(x, lo, hi):
+    return max(lo, min(hi, x))
+
+
+def ReferenceTheta(t):
+    return -math.cos(math.pi * t / T)
+
+
+def CMDSending(angle):
+
+
+    angle = clamp(angle, LowerJoint, UPPERJoint)
+
+
+    subprocess.run(
+        [
+            "ign", "topic",
+            "-t", CMDForTopic,
+            "-m", "ignition.msgs.Double",
+            "-p", f"data: {angle}"
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
+
+
+def JointPosition():
+
+
+    try:
+        proc = subprocess.Popen(
+            ["ign", "topic", "-e", "-n", "1", "-t", StateForTopic],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        output, _ = proc.communicate(timeout=1.2)
+    except Exception:
+        return None
+
+
+    m = re.search(r'position:\s*([-0-9.eE]+)', output)
+
+
+    if m:
+        return float(m.group(1))
+
+
+    return None
+
+
+print("Resetting panel to 0 rad...")
+CMDSending(0.0)
+time.sleep(1)
+
+
+CMDForGears = 0.0
+
+
+with open(CSVFileMaker, "w", newline="") as file:
+
+
+    writer = csv.writer(file)
+
+
+    writer.writerow([
+        "Time_Secondseconds",
+        "Target_SUN",
+        "CMDForGearboxRad",
+        "SolarPanelRadians",
+        "SolarPanelRadians"
+    ])
+
+
+    for k in range(N):
+
+
+        t = k * DT
+
+
+        ref = ReferenceTheta(t)
+
+
+        CMDForGears = CMDForGears + (alphaMotor / RatioForGears) * (ref - CMDForGears)
+
+
+        CMDSending(CMDForGears)
+
+
+        time.sleep(max(DT - 0.06, 0))
+
+
+        actual = JointPosition()
+
+
+        if actual is None:
+            ESTIMATED_ACTUAL = ESTIMATED_ACTUAL + ESTIMATED_ALPHA * (CMDForGears - ESTIMATED_ACTUAL)
+            actual = ESTIMATED_ACTUAL
+
+
+        error = ref - actual
+
+
+        writer.writerow([
+            round(t, 3),
+            round(ref, 5),
+            round(CMDForGears, 5),
+            round(actual, 5),
+            round(error, 5)
+        ])
+
+
+print("Scenario 5 complete")
