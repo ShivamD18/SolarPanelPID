@@ -3,12 +3,12 @@
 ![Simulator](https://img.shields.io/badge/simulator-Gazebo-orange)
 ![Language](https://img.shields.io/badge/controller-Python-blue)
 ![Controller](https://img.shields.io/badge/control-PD%20state%20feedback-green)
-<!-- TODO: Add license badge -->
+
 
 <p align="center">
   <img src="Scenario_1_604PROJECT.png" alt="Solar tracker in Gazebo" width="70%">
   <br>
-  <em>PLACEHOLDER: Solar Tracker Simulation in Gazebo.</em>
+  <em>Solar Tracker Simulation in Gazebo.</em>
 </p>
 
 ## Overview
@@ -104,13 +104,13 @@ python controller.py --scenario 1
 └── README.md
 ```
 
-<!-- TODO: Update to match the actual repository layout -->
+
 
 ## Authors
 
-Zakareya Gharib, Farooq Nomani, and Shivam Dave.
+Shivam Dave Zakareya Gharib and Farooq Nomani.
 
 ## License
 
 <!-- TODO: Choose a license and add a LICENSE file -->
-Licensed under the **[LICENSE NAME]**. See `LICENSE` for details.
+Licensed under the **MIT LICENSE**. See `LICENSE` for details.
