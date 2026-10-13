@@ -6,9 +6,9 @@
 <!-- TODO: Add license badge -->
 
 <p align="center">
-  <img src="docs/images/hero.png" alt="Solar tracker in Gazebo" width="70%">
+  <img src="Scenario_1_604PROJECT.png" alt="Solar tracker in Gazebo" width="70%">
   <br>
-  <em>PLACEHOLDER: Screenshot or GIF of the tracker in Gazebo.</em>
+  <em>PLACEHOLDER: Solar Tracker Simulation in Gazebo.</em>
 </p>
 
 ## Overview
